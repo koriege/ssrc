@@ -1,0 +1,49 @@
+#### INFO
+
+SSRC - counts mapped reads for given annotation file
+
+counts splitted reads only once
+counts strand specific
+counts on exons or whole genes
+calculates TPM values
+
+
+#### INSTALLATION
+
+# Download latest SSRC
+wget https://github.com/rna-hta-jena/ssrc/archive/master.zip
+# Extract library
+unzip master.zip
+# Enter extracted directory
+cd ssrc-master
+# Set programs installation path
+export PROGRAMS=$HOME/programs/
+# install samtools
+bash install_samtools.sh
+# export samtools installation for Perl Module installation
+export SAMTOOLS=$PROGRAMS/samtools-0.1.19
+# Set module installation path
+export MODINSTALL=$HOME/perl5
+# Tell Perl where to find modules
+export PERL5LIB=$MODINSTALL/lib/perl5:$PERL5LIB
+# Make this permanent
+echo 'export PERL5LIB='$PERL5LIB >> $HOME/.bashrc
+# Start installation
+./cpanm -l $MODINSTALL .
+# copy scripts to programs directory
+cp *.pl $PROGRAMS
+
+
+#### RUN
+
+perl Split_senstive_read_counter.pl -h
+
+
+#### CONTACT
+
+Konstantin Riege
+Chair of Bioinformatics
+High Throughput Analysis
+Friedrich-Schiller-University Jena
+http://www.rna.uni-jena.de
+konstantin{.}riege{a}uni-jena{.}de
