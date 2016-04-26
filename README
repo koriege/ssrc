@@ -10,6 +10,9 @@ calculates TPM values
 
 #### INSTALLATION
 
+All libraries and tools will be installed locally without root permissions
+To remove SSRC completely, just delete the installation directory
+
 # Download latest SSRC
 wget https://github.com/rna-hta-jena/ssrc/archive/master.zip
 # Extract library

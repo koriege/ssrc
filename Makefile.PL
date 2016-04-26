@@ -5,10 +5,8 @@ use warnings;
 my @scripts = qw (Split_senstive_read_counter.pl);
 
 WriteMakefile(
-	'NAME'	=>	'Bio::Gorap',
+	'NAME'	=>	'SSRC',
 	'AUTHOR'	=>	q{Konstantin Riege},
-	'VERSION_FROM'	=>	'lib/Bio/Gorap/Gorap.pm',
-	'ABSTRACT_FROM'	=>	'lib/Bio/Gorap/Gorap.pm',
 	'LICENSE'	=>	'perl',
 	'PREREQ_PM'	=>	{
 		'Getopt::Long'	=>	'2.0',

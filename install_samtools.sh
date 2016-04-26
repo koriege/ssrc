@@ -36,9 +36,11 @@ download () {
 	fi
 }
 
-cd $pwd
 tool='samtools-0.1.19'
 samtool=$tool
+ex=0
+download
+
 tool='zlib-1.2.8'		
 ex=0
 download				
