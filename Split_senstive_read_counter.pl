@@ -24,10 +24,11 @@ use POSIX qw(:sys_wait_h);
 	't|threads=i' => \my $threads,
 	'o|out=s' => \my $outfile,
 	'ol|overlap=i' => \my $overlap,
+	'ss|strandspec' => \my $strandspec,
 	'h|help' => \my $help
 ) or pod2usage(-exitval => 2, -verbose => 1);
 pod2usage(-exitval => 2, -verbose => 2) if $help;
-pod2usage(-exitval => 2, -verbose => 1) unless $gfffile || $gtffile || $bamfile || $outfile || $genetag || $exontag;
+pod2usage(-exitval => 2, -verbose => 1) if ! ($gfffile || $gtffile) || ! $bamfile || ! $outfile || ! $genetag || ! $exontag;
 pod2usage(-exitval => 2, -verbose => 1) if $gtffile && ! $gix;
 pod2usage(-exitval => 2, -verbose => 1) if $gfffile && ! -e $gfffile;
 pod2usage(-exitval => 2, -verbose => 1) if $gtffile && ! -e $gtffile;
@@ -186,7 +187,7 @@ my $libsize = 0;
 my @features = $gff->features;
 my @data;
 my @pids;
-my $chunks = ($#features+1)/($threads-1);
+my $chunks = ($#features+1)/($threads);
 push @data, [ splice @features, 0, $chunks ] while @features;
 my $select = IO::Select->new();
 
@@ -212,15 +213,38 @@ while (my $features = shift @data){
 		for my $f (@$features){					
 			next unless exists $chr{$f->seq_id};
 
-			my ($count,$tpm,$strand,$length) = (0,0,1,0);
+			my ($count,$tpm,$length) = (0,0,0,0);
 			
 			my @reads;
+			#todo: read_pair doesnt distinguish between split pairs and mate pairs
+			#i.e. if both mates are split mapped, finally 2 reads will be pushed instead of 1
+			#todo parse primary_id -> huge overhead
 			for my $r ($bam->get_features_by_location(-type => 'read_pair', -seq_id => $f->seq_id, -start => $f->start, -end => $f->stop)){
 				next if $r->stop - $f->start < 20 || $f->stop - $r->start < 20;
-				for ($r->segments){
-					$strand = -1 if $_->get_tag_values('FLAGS')=~/REVERSED/;
+				my $doublecount_dueto_split = 0;
+				if ($strandspec && $f->strand != 0){					
+					my $strand = 1;
+					my $unmapped = 0;
+					my @segments = $r->segments;
+					# my $mates = 0;
+					# my $matemapped = 1;
+					# my $paired = 0;
+					for (@segments){
+						my @flags = split /\|/ , $_->get_tag_values('FLAGS');
+						for (@flags){
+							$unmapped++ if $_ eq 'UNMAPPED'; #counts read also if only one mate maps
+							$strand = -1 if $_ eq 'REVERSED'; #to exclude M_REVERSED
+							# $mates++ if $_=~/FIRST/ || $_=~/SECOND/;
+							# $matemapped = 0 if $_=~/M_UNMAPPED/;
+							# $paired = 1 if $_=~/PAIRED/;
+						}						
+					}
+					# $doublecount_dueto_split++ if $paired && $mates < 2 && $matemapped;
+					#substract this from count if both mates overlaps with exons
+					push @reads , $r if $unmapped < ($#segments +1) && $strand == $f->strand;
+				} else {
+					push @reads , $r;
 				}
-				push @reads , $r if $strand == $f->strand;				
 			}
 			my ($id) = $f->get_tag_values('ID');
 			if ($genecount){
@@ -288,7 +312,7 @@ for my $f ($gff->features){
 
 	};
 	$out[8].="reads=$count;TPM=$tpm";
-	say OUT join "\t" , @out;
+	say OUT join "\t" , @out;	
 }
 close OUT;
 
@@ -364,8 +388,13 @@ B<-ol>, B<--overlap>=I<INT>
 
 B<-t>, B<--threads>=I<INT>
 
-	(optional)
+	(optional, default: 1)
 	number of threads to use
+
+B<-ss>, B<--strandspec>	
+
+	(optional, default: false)
+	input is strand specific data
 
 B<-gc>, B<--genecount>
 
