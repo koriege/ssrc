@@ -33,7 +33,7 @@ pod2usage(-exitval => 2, -verbose => 1) if $gtffile && ! $gix;
 pod2usage(-exitval => 2, -verbose => 1) if $gfffile && ! -e $gfffile;
 pod2usage(-exitval => 2, -verbose => 1) if $gtffile && ! -e $gtffile;
 pod2usage(-exitval => 2, -verbose => 1) unless -e $bamfile;
-$threads = 1 unless $threads;
+$threads = 2 unless $threads;
 $overlap = 20 unless $overlap;
 
 sub add_gff_gene(){
@@ -88,6 +88,8 @@ sub add_gff_exon(){
 	} split /;/ , $line[-1];
 
 	my ($parent) = $db->get_features_by_attribute(ID => $attributes{ID});
+	return unless $parent;
+
 	my $child = $db->new_feature(
 		-start => $line[3],
 		-stop => $line[4],
@@ -146,6 +148,8 @@ sub add_gtf_exon(){
 	my $id = $exidsep ? (split /$exidsep/ , substr($line[$gix],1,-2))[0] : substr($line[$gix],1,-2);
 	
 	my ($parent) = $db->get_features_by_attribute(ID => $id);
+	return unless $parent;
+
 	my $child = $db->new_feature(
 		-start => $line[3],
 		-stop => $line[4],
@@ -161,7 +165,7 @@ sub add_gtf_exon(){
 
 my $gff = Bio::DB::SeqFeature::Store->new( -adaptor => 'memory', -verbose => -1 );
 $gff->init_database([1]);
-say "reading reference annotation";
+say "reading";
 if ($gfffile){	
 	open GFF , '<'.$gfffile or die $!;
 	&add_gff_gene($gff,$_) while(<GFF>);
@@ -195,22 +199,34 @@ my $select = IO::Select->new();
 my $bam = Bio::DB::Sam->new(-bam => $bamfile, -autindex => 1, -verbose => -1);
 my $next;		
 my %chr;
+say "counting";
 for (`samtools idxstats $bamfile`){ #todo counts all fragments
 	next if $_=~/^\*/;
 	next if $_=~/fail/;			
 	my ($header , $size, $mapped, $unmapped) = split /\s+/ , $_;
 	$chr{$header}=1;
 	$libsize += $mapped;	
-}		
-while (my $features = shift @data){
+}
+
+#while (my $features = shift @data){
+for my $i (0..$#data){
+	my $features = $data[$i];
 	my $pipe = IO::Pipe->new;
-	my $pid = fork();			
+	my $pid = fork();	
 	unless ($pid) {
+		sleep 1;
 		$pipe->writer();
 		$pipe->autoflush(1);
 		$bam->clone;
-
-		for my $f (@$features){					
+		my $progress = 5;
+		say "0%" if $i == 0;
+		my $pc = 0 ;
+		for my $f (@$features){
+			$pc++;			
+			if ($i == 0 && 100/(($#{$features}+1)/$pc) > $progress && $progress < 100){				
+				say "$progress%";
+				$progress+=5;
+			}
 			next unless exists $chr{$f->seq_id};
 
 			my ($count,$tpm,$length) = (0,0,0,0);
@@ -221,7 +237,7 @@ while (my $features = shift @data){
 			#todo parse primary_id -> huge overhead
 			for my $r ($bam->get_features_by_location(-type => 'read_pair', -seq_id => $f->seq_id, -start => $f->start, -end => $f->stop)){
 				next if $r->stop - $f->start < 20 || $f->stop - $r->start < 20;
-				my $doublecount_dueto_split = 0;
+				# my $doublecount_dueto_split = 0;
 				if ($strandspec && $f->strand != 0){					
 					my $strand = 1;
 					my $unmapped = 0;
@@ -269,7 +285,7 @@ while (my $features = shift @data){
 			say $pipe "$id $length $count";
 		}
 		exit;
-	} else {				
+	} else {		
 		push @pids, $pid;
 		$pipe->reader();
 		$select->add($pipe);
@@ -277,6 +293,7 @@ while (my $features = shift @data){
 }
 
 waitpid($_,0) for @pids;
+say "100%";
 
 my %counts;
 my %lengths;
@@ -292,7 +309,7 @@ while( my @responses = $select->can_read(0) ){
 }
 
 open OUT , '>'.$outfile or die $!;
-for my $f ($gff->features){
+for my $f (sort {$a->seq_id cmp $b->seq_id || $a->start <=> $b->start || $a->stop <=> $b->stop} $gff->features){
 	my ($id) = $f->get_tag_values('ID');
 	my ($count, $tpm ) = (0,0);
 	my @out = split /\s+/ , $f->gff_string;
